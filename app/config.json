@@ -1,0 +1,22 @@
+{
+    "API_KEY_HEADER_NAME": "x-api-key",
+    "API_KEY_PASSPHRASE": "123456",
+    "OPENAI_API_KEY": "fk217gpq25nv7QcOhYYbMB8J5gSERTOVshp",
+    "OPENAI_API_BASE": "https://openai.api2d.net/v1",
+    "LLM_MAX_RETRIES": 5,
+    "LLM_RETRY_DELAY": 1,
+    "C1": "",
+    "TXT_API_USED": "OpenAI",
+    "TXT_SELECTED_MODEL": "gpt-3.5-turbo-1106",
+    "TXT_FUNCTION_SELECTED_MODEL": "gpt-3.5-turbo-1106",
+    "TXT_TOOLS_GENERATION_ENABLE_CACHE": false,
+    "TXT_TOOLS_GENERATION_CACHE_DAYS": 14,
+    "MAX_TOKENS": 3500,
+    "STABILITY_API_KEY":"s",
+    "RAPIDAPI_API_KEY":"cddd4a9bd5a2d1a31dp146862jsnf8d7efb94209",
+    "LlamaParse":"llx-9o2m2BR4rYzMaTs5oplaHBjqZdpWG821B3o0t",
+    "VALUE_SERP_API_KEY" :"XXX",
+    "SERPER_API_KEY" : "b8214fe88ea5c2fcb3a1301f82e3f5e2b4d7d0671491008e670525abf9",
+    "pinecone":"029b179c-ea9c-46e5-b2s49e11544",
+    "MONGO_CONNECTION_STRING": "mongodb+srv://497070928:e2gr2OfQ@cluster0.jpdnuxm.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
+}
