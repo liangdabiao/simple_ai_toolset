@@ -14,9 +14,13 @@ pip install -r requirements.txt
 #### 退出虚拟环境（如果你使用了虚拟环境）：完成安装后，可以通过以下命令退出虚拟环境： 
 deactivate
 
+## 执行启动：
+ uvicorn app.main:app --host=0.0.0.0 --port=8080
+
+
 ## 功能介绍：
 
-AI大模型的基本开发框架，适合普通后端程序员，功能类似coze包括：fastapi后端接口，搜索，文档解析和向量化，RPA和爬虫，自定义agent，对接第三方数据接口，mongodb数据库，控制json返回，多模态理解和生成等等
+AI大模型的基本开发框架，适合普通后端程序员，功能类似coze包括：fastapi后端接口，搜索，RAG文档解析和向量化，RPA和爬虫，自定义agent，对接第三方数据接口，mongodb数据库，控制json返回，多模态理解和生成等等
 
 有新的AI功能，会马上跟随潮流，添加上去。
 
