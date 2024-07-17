@@ -738,6 +738,7 @@ async def mongodb(keyword: str, request: Request):
 
 
 """   图文回复 """
+""" 参考：https://www.cnblogs.com/yourenbo/p/18065421 """
 @router.get("/rag_pic")
 async def rag_pic(question: str, request: Request): 
    
@@ -779,6 +780,8 @@ async def rag_pic(question: str, request: Request):
     
 
     query_engine = index.as_query_engine()
+    # 可以指定固定回复格式 参考：https://segmentfault.com/a/1190000044329812
+    # query_engine = index.as_query_engine(output_cls=BlogTitles) 
 
     # 定义qa prompt
     qa_prompt_tmpl_str = (
@@ -816,16 +819,401 @@ async def rag_pic(question: str, request: Request):
 
     print(response)
 
+    # Get sources 调试和 验证黑盒子里面的运行 RAG过程 参考：https://www.cnblogs.com/yourenbo/p/18058145
+    print(response.metadata)
+    print(response.source_nodes)
+    print(response.get_formatted_sources())
 
+
+
+
+"""   编程技术回复 """
+""" 参考：https://www.cnblogs.com/yourenbo/p/18065421 """
+@router.get("/ragtech2")
+async def ragtech2(question: str, request: Request): 
+   
+    
+
+    # 保存 向量数据库 pinecone
+    ### 参考 https://docs.llamaindex.ai/en/stable/module_guides/indexing/vector_store_guide/ ###
+    # init pinecone
+    pc = Pinecone(api_key=config.get("pinecone"))
+
+    # Now do stuff
+    if 'ragtech2' not in pc.list_indexes().names():
+        pc.create_index(
+            name='ragtech2',
+            dimension=1536,
+            metric='euclidean',
+            spec=ServerlessSpec(
+                cloud='aws',
+                region='us-east-1'
+            )
+        )
+        # construct vector store and customize storage context
+        storage_context = StorageContext.from_defaults(
+            vector_store=PineconeVectorStore(pc.Index("ragtech2"))
+        )
+
+        documents = SimpleDirectoryReader(input_files=['./data/ragtech2.txt']).load_data()
+       
+        index = VectorStoreIndex.from_documents(
+            documents, storage_context=storage_context
+        )
+    else:
+        # 查询 已存的向量数据
+        vector_store = PineconeVectorStore(pc.Index("ragtech2"))
+        index = VectorStoreIndex.from_vector_store(vector_store=vector_store)
+ 
+
+    
+
+    query_engine = index.as_query_engine()
+    # 可以指定固定回复格式 参考：https://segmentfault.com/a/1190000044329812
+    # query_engine = index.as_query_engine(output_cls=BlogTitles) 
+
+    # 定义qa prompt
+    qa_prompt_tmpl_str = (
+        "上下文信息如下。\n"
+        "---------------------\n"
+        "{context_str}\n"
+        "---------------------\n"
+        "请根据上下文信息而不是先验知识来回答以下的查询。回复格式：markdown 。 "
+        "作为一个IT工程师人工智能助手，你的回答要尽可能严谨。\n"
+        "Query: {query_str}\n"
+        "Answer: "
+    )
+    qa_prompt_tmpl = PromptTemplate(qa_prompt_tmpl_str)
+
+    # 定义refine prompt
+    refine_prompt_tmpl_str = (
+        "原始查询如下：{query_str}"
+        "我们提供了现有答案：{existing_answer}"
+        "我们有机会通过下面的更多上下文来完善现有答案（仅在需要时）。"
+        "------------"
+        "{context_msg}"
+        "------------"
+        "考虑到新的上下文，优化原始答案以更好地回答查询。 如果上下文没有用，请返回原始答案。"
+        "Refined Answer:"
+    )
+    refine_prompt_tmpl = PromptTemplate(refine_prompt_tmpl_str)
+
+    # 更新查询引擎中的prompt template
+    query_engine.update_prompts(
+        {"response_synthesizer:text_qa_template": qa_prompt_tmpl,
+         "response_synthesizer:refine_template": refine_prompt_tmpl}
+    )
+
+    response = query_engine.query(question)
+
+    print(response)
+
+
+
+
+
+"""   软考考试RAG回复 """
+""" 参考：https://www.cnblogs.com/yourenbo/p/18065421 """
+@router.get("/ruankao")
+async def ruankao(question: str, request: Request): 
+   
+    
+
+    # 保存 向量数据库 pinecone
+    ### 参考 https://docs.llamaindex.ai/en/stable/module_guides/indexing/vector_store_guide/ ###
+    # init pinecone
+    pc = Pinecone(api_key=config.get("pinecone"))
+
+    # Now do stuff
+    if 'ruankao' not in pc.list_indexes().names():
+        pc.create_index(
+            name='ruankao',
+            dimension=1536,
+            metric='euclidean',
+            spec=ServerlessSpec(
+                cloud='aws',
+                region='us-east-1'
+            )
+        )
+        # construct vector store and customize storage context
+        storage_context = StorageContext.from_defaults(
+            vector_store=PineconeVectorStore(pc.Index("ruankao"))
+        )
+
+        documents = SimpleDirectoryReader(input_files=['./data/ruankao.txt']).load_data()
+       
+        index = VectorStoreIndex.from_documents(
+            documents, storage_context=storage_context
+        )
+    else:
+        # 查询 已存的向量数据
+        vector_store = PineconeVectorStore(pc.Index("ruankao"))
+        index = VectorStoreIndex.from_vector_store(vector_store=vector_store)
+ 
+
+    
+
+    query_engine = index.as_query_engine()
+    # 可以指定固定回复格式 参考：https://segmentfault.com/a/1190000044329812
+    # query_engine = index.as_query_engine(output_cls=BlogTitles) 
+
+
+
+
+    # 定义qa prompt
+    qa_prompt_tmpl_str = (
+        "## 角色\n"
+        "请你扮演中国软件水平考试高级辅导专家，负责用户发送的概念讲解和发送的题目解答。\n"
+
+        "## 技能\n"
+        "### 技能1：概念讲解\n"
+        "当我发送一些软考概念题目的上下文信息。\n"
+        "Step1：根据概括帮我讲解一下相关内容，讲解时尽量通俗易懂，并给出恰当的例子，优先使用 markdown 表格的形式来呈现\n"
+        "Step2：出 2 道相关的选择题，在出完题目的最后给出答案和对答案的详细讲解。\n"
+
+        "输出格式为：\n"
+        "=====\n"
+
+        "# 一、AI 讲解\n"
+        "<概念讲解>\n"
+
+        "# 二、AI 出题\n"
+        "### （1）题目\n"
+        "<出对应的2道选择题>\n"
+        "### （2）答案和解析\n"
+        "<所有选择题的答案和解释，每个答案和对应解释放在一起>\n"
+
+        "=====\n"
+
+        "## 要求\n"
+        "1 必须使用中文回答我\n"
+        "2 解答时，尽量使用通俗易懂的语言\n"
+        "3 讲解时，如果有可能尽量给出相关例子\n"
+        "4 讲解时，优先考虑使用 markdown 表格的方式呈现，如果出现不同层级的概念，可以将不同层级的概念用不同的表格表示\n"
+        "5 给出答案和解析时，每道题的答案和解释要在一起给出，答案的解释需要详尽\n"
+        "上下文信息如下。\n"
+        "---------------------\n"
+        "{context_str}\n"
+        "---------------------\n"
+        "请根据上下文信息而不是先验知识来回答以下的查询。回复格式：markdown 。 "
+        "作为一个中国软考考试专家人工智能助手，你的回答要尽可能严谨。\n"
+        "Query: 关于 {query_str}\n"
+        "Answer: "
+    )
+    qa_prompt_tmpl = PromptTemplate(qa_prompt_tmpl_str)
+
+    # 定义refine prompt
+    refine_prompt_tmpl_str = (
+        "原始查询如下：{query_str}"
+        "我们提供了现有答案：{existing_answer}"
+        "我们有机会通过下面的更多上下文来完善现有答案（仅在需要时）。"
+        "------------"
+        "{context_msg}"
+        "------------"
+        "考虑到新的上下文，优化原始答案以更好地回答查询。 如果上下文没有用，请返回原始答案。"
+        "Refined Answer:"
+    )
+    refine_prompt_tmpl = PromptTemplate(refine_prompt_tmpl_str)
+
+    # 更新查询引擎中的prompt template
+    query_engine.update_prompts(
+        {"response_synthesizer:text_qa_template": qa_prompt_tmpl,
+         "response_synthesizer:refine_template": refine_prompt_tmpl}
+    )
+
+    response = query_engine.query(question)
+
+    print(response)
+
+    # Get sources 调试和 验证黑盒子里面的运行 RAG过程 参考：https://www.cnblogs.com/yourenbo/p/18058145
+    # print(response.metadata)
+    # print(response.source_nodes)
+    # print(response.get_formatted_sources())
+
+
+
+
+
+"""   多tools的智能体 """
+#Define a  search tool
+def tool_search(keyword: str):
+    """
+    Search content from a given Keyword.
+    Parameters: keyword (str)
+    """
+    llm_instance = LLM.create(provider=LLMProvider.OPENAI, model_name="gpt-4o") 
+    search_query_encoded = quote_plus(keyword)
+    sjina = str("https://s.jina.ai/"+search_query_encoded)
+    print(sjina)
+    response = requests.get(sjina)
+    content = ""
+
+    # 检查请求是否成功
+    if response.status_code == 200:
+        try:
+            # 解析响应的JSON数据
+            content = response.text
+        except json.JSONDecodeError as e:
+            # 如果响应不是有效的JSON，打印错误信息
+            print(f"Failed to decode JSON: {e}")
+    else:
+        print(f"Request failed with status code: {response.status_code}")
+
+     
+    #print(content)
+    #main_points = llm_instance.generate_response(prompt=f"extract the key information out of the following: {content}")
+
+    #print(main_points)
+
+    return content
+
+
+
+#Define a  什么值得买 tool
+def tool_smzdm():
+    """
+    寻找优惠商品.
+    """
+    sjina = str("https://r.jina.ai/https://www.smzdm.com/fenlei/jimupincha/#feed-main/") 
+    response = requests.get(sjina)
+    content = ""
+
+    # 检查请求是否成功
+    if response.status_code == 200:
+        try:
+            # 解析响应的JSON数据
+            content = response.text
+            parts = content.split("[24小时排行]")
+            # 检查是否有分割后的部分
+            if len(parts) > 1:
+                # 获取分割后的最后一部分
+                content = parts[1]
+            else:
+                print("分隔符不存在于字符串中")
+        except json.JSONDecodeError as e:
+            # 如果响应不是有效的JSON，打印错误信息
+            print(f"Failed to decode JSON: {e}")
+    else:
+        print(f"Request failed with status code: {response.status_code}")
+
+
+    return content
+
+
+
+#Define a  最新积木新品 tool
+def tool_brick4():
+    """
+    寻找最新商品新品.
+    """
+    sjina = str("http://brick4.com/get/set?filter_brandorder=0&filter_order=1&brandorder=1&page=1") 
+    response = requests.get(sjina)
+    content = ""
+
+    # 检查请求是否成功
+    if response.status_code == 200:
+        try:
+            # 解析响应的JSON数据
+            content = response.json()
+            # 检查'data'字段是否存在，并且它是一个数组
+            if 'data' in content and isinstance(content['data'], list):
+                # 将数组转换成字符串
+                first_6_elements = content['data'][:6]
+                content = json.dumps(first_6_elements, ensure_ascii=False)
+            else:
+                content = ""  # 如果'data'字段不存在或不是数组，使用默认值
+            # print(content)
+        except json.JSONDecodeError as e:
+            # 如果响应不是有效的JSON，打印错误信息
+            print(f"Failed to decode JSON: {e}")
+    else:
+        print(f"Request failed with status code: {response.status_code}")
+
+    return content
+
+
+#Define a  积木新闻 tool
+def tool_brick_news():
+    """
+    寻找优惠商品.
+    """
+    sjina = str("https://r.jina.ai/https://zhiyou.smzdm.com/member/6120925173/article/") 
+    response = requests.get(sjina)
+    content = ""
+
+    # 检查请求是否成功
+    if response.status_code == 200:
+        try:
+            # 解析响应的JSON数据
+            content = response.text
+            parts = content.split("6120925173/zhuanlan")
+            # 检查是否有分割后的部分
+            if len(parts) > 1:
+                # 获取分割后的最后一部分
+                content = parts[1]
+                parts2 = content.split(" [下一页]")
+                # 检查是否有分割后的部分
+                if len(parts2) > 1:
+                    # 获取分割后的最后一部分
+                    content = parts2[0]
+            else:
+                print("分隔符不存在于字符串中")
+        except json.JSONDecodeError as e:
+            # 如果响应不是有效的JSON，打印错误信息
+            print(f"Failed to decode JSON: {e}")
+    else:
+        print(f"Request failed with status code: {response.status_code}")
+
+    return content
+
+
+"""   ai agent tester """
+@router.get("/ai_agent_lego")
+async def ai_agent_lego(question: str, request: Request):
+    
+    llm_instance = LLM.create(provider=LLMProvider.OPENAI, model_name="gpt-4o")
+    # Create an agent instance
+    agent = Agent(LLMProvider.OPENAI, model_name="gpt-4o")
+
+    #add tools
+    agent.add_tool(tool_search)
+    agent.add_tool(tool_smzdm)
+    agent.add_tool(tool_brick4)
+
+    user_query = question
+
+    # Generate a response
+    final_result = agent.generate_response(user_query)
+    print(final_result)
+
+
+"""   模仿hackernew 推送和新闻头条 """
+@router.get("/ai_write_lego")
+async def ai_write_lego(request: Request):
+    
+    llm_instance = LLM.create(provider=LLMProvider.OPENAI, model_name="gpt-4o")
+    
+    tool_brick_news_str = tool_brick_news()
+    main_points_1 = llm_instance.generate_response(prompt=f"keep image and extract the key information out of the following [积木情报]: {tool_brick_news_str}")
+   
+    tool_smzdm_str = tool_smzdm()
+    main_points_2 = llm_instance.generate_response(prompt=f"extract the key information out of the following [积木优惠]: {tool_smzdm_str}")
+    tool_brick4_str = tool_brick4()
+    main_points_3 = llm_instance.generate_response(prompt=f"extract the key information out of the following [积木新品]: {tool_brick4_str}")
+    all_str ="# 今天积木情报: \n\n" + main_points_1 + "\n\n # 今天积木优惠: \n\n" + main_points_2 + "\n\n # 今天积木新品: \n\n" + main_points_3
+    
+    main_points_best = llm_instance.generate_response(prompt=f"你是一个积木专栏作家，请给上下文内容一个总结，上下文如下: {all_str}")
+    print(main_points_best)
+    print(all_str)
 
 """   firecrawl 爬整个网站 /ApifyActor TODO """
 
-"""   多tools的智能体 """
+
 """   连续对话和记忆 """
 
 
 """   定时任务 """
-"""   模仿hackernew 推送和新闻头条 """
+
 """   oss上传 """
 
 
