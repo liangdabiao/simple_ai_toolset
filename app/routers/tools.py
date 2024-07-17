@@ -18,7 +18,7 @@ from ..services.language.llm import LLM, LLMProvider
 from ..services.tools.generic_loader import load_content
 from ..services.tools.ai_personas import persona_prompts_small
 from ..services.tools.serp import search_with_serper_api
-from ..services.tools.text_chunker import chunk_by_semantics
+from ..services.tools.text_chunker import chunk_by_semantics,chunk_by_paragraphs,chunk_by_max_chunk_size
 from ..services.tools.SimplerVectors_core import VectorDatabase
 from ..services.language.embeddings import LLM as EmbeddingLLM,EmbeddingsProvider
 from ..services.prompts_build.prompt_builder import create_multi_value_prompts
@@ -29,10 +29,11 @@ import chromadb
 import pinecone
 import nest_asyncio
 from llama_parse import LlamaParse
-from llama_index.core import VectorStoreIndex, SimpleDirectoryReader, StorageContext
+from llama_index.core import VectorStoreIndex, SimpleDirectoryReader, StorageContext, PromptTemplate
 from llama_index.vector_stores.pinecone import PineconeVectorStore
 from pinecone import Pinecone, ServerlessSpec
 from ..config_loader import config
+from ..mongo import get_database
 
 logger = logging.getLogger("AppLogger")
 router = APIRouter()
@@ -441,13 +442,14 @@ async def search_with_chromadb(user_input: str, request: Request):
     # 下面是 正式工作，向量导入和搜索
     llm_instance = LLM.create(provider=LLMProvider.OPENAI, model_name="gpt-4o")
     llm_embedding_instance = EmbeddingLLM.create(provider=EmbeddingsProvider.OPENAI, model_name="text-embedding-ada-002")
-    url = "https://docs.trychroma.com/getting-started"
+    # url = "https://docs.trychroma.com/getting-started"
+    url = './data/abc.txt'
     content = load_content(url).content
     print(content)
 
     #chunk the content
-    chunks = chunk_by_semantics(text=content,llm_embeddings_instance=llm_embedding_instance,threshold_percentage=95).chunks
-    collection = client.get_or_create_collection(name="thepaper") 
+    chunks = chunk_by_max_chunk_size(text=content,max_chunk_size=200).chunks
+    collection = client.get_or_create_collection(name="abc6") 
     for idx,chunk in enumerate(chunks):
         collection.add(
             documents=[chunk.text], # we handle tokenization, embedding, and indexing automatically. You can skip that and add your own embeddings as well
@@ -456,13 +458,24 @@ async def search_with_chromadb(user_input: str, request: Request):
         )
 
     results = collection.query(
-        query_texts=["get_or_create_collection"],
+        query_texts=[user_input],
         n_results=2,
         # where={"metadata_field": "is_equal_to_this"}, # optional filter
         # where_document={"$contains":"search_string"}  # optional filter
     )
 
     print(results)
+
+    if results:
+        top_match = results['documents'][0]
+        context = ' '.join(top_match)
+        prompt = f"Answer the following question: {user_input} \n Based on this context only: \n" + context
+        print(prompt)
+        answer = llm_instance.generate_response(prompt=prompt)
+        print(answer)
+
+    else:
+        print("Bot: I'm not sure how to answer that.")
 
     return {
         "success": True,
@@ -681,17 +694,141 @@ async def rapid_api(keyword: str, request: Request):
     print(data_json)
 
 
+"""   mongodb的数据库功能 """
+@router.get("/mongodb")
+async def mongodb(keyword: str, request: Request):
+    try:
+        db = await get_database("llm_cache_db")
+        cache_collection = db["llm_cache"]
+        await cache_collection.insert_one(
+            {
+                "test": "test",
+                "response": "test"
+            }
+        )
+
+        threshold_date = datetime.now(timezone.utc) - timedelta(
+            days=CACHE_DURATION_DAYS
+        )
+        my_response = await cache_collection.find_one(
+            {
+                "test": "test",
+                "recorded_date": {"$gte": threshold_date},
+            },
+            projection={"response": 1, "_id": 0},
+        )
+        results = my_response.get("response") if my_response else None
+        print(results)
+
+        return {
+            "success": True,
+            "message": "search_with_chromadb Successfully",
+            "result": results
+        }
+
+
+    except Exception:
+        logger.exception(
+            f"llm:my_response exception for test "
+        )
+        return None
+
+
+
+
+
+"""   图文回复 """
+@router.get("/rag_pic")
+async def rag_pic(question: str, request: Request): 
+   
+    
+
+    # 保存 向量数据库 pinecone
+    ### 参考 https://docs.llamaindex.ai/en/stable/module_guides/indexing/vector_store_guide/ ###
+    # init pinecone
+    pc = Pinecone(api_key=config.get("pinecone"))
+
+    # Now do stuff
+    if 'abc' not in pc.list_indexes().names():
+        pc.create_index(
+            name='abc',
+            dimension=1536,
+            metric='euclidean',
+            spec=ServerlessSpec(
+                cloud='aws',
+                region='us-east-1'
+            )
+        )
+        # construct vector store and customize storage context
+        storage_context = StorageContext.from_defaults(
+            vector_store=PineconeVectorStore(pc.Index("abc"))
+        )
+
+        documents = SimpleDirectoryReader(input_files=['./data/abc.txt']).load_data()
+        print(documents)
+
+        index = VectorStoreIndex.from_documents(
+            documents, storage_context=storage_context
+        )
+    else:
+        # 查询 已存的向量数据
+        vector_store = PineconeVectorStore(pc.Index("abc"))
+        index = VectorStoreIndex.from_vector_store(vector_store=vector_store)
  
-"""   firecrawl 爬整个网站 TODO """
+
+    
+
+    query_engine = index.as_query_engine()
+
+    # 定义qa prompt
+    qa_prompt_tmpl_str = (
+        "上下文信息如下。\n"
+        "---------------------\n"
+        "{context_str}\n"
+        "---------------------\n"
+        "请根据上下文信息而不是先验知识来回答以下的查询。回复格式：请务必把上下文的图片image jpg放在回答的底部作为参考。"
+        "作为一个油画艺术人工智能助手，你的回答要尽可能严谨。\n"
+        "Query: {query_str}\n"
+        "Answer: "
+    )
+    qa_prompt_tmpl = PromptTemplate(qa_prompt_tmpl_str)
+
+    # 定义refine prompt
+    refine_prompt_tmpl_str = (
+        "原始查询如下：{query_str}"
+        "我们提供了现有答案：{existing_answer}"
+        "我们有机会通过下面的更多上下文来完善现有答案（仅在需要时）。"
+        "------------"
+        "{context_msg}"
+        "------------"
+        "考虑到新的上下文，优化原始答案以更好地回答查询。 如果上下文没有用，请返回原始答案。"
+        "Refined Answer:"
+    )
+    refine_prompt_tmpl = PromptTemplate(refine_prompt_tmpl_str)
+
+    # 更新查询引擎中的prompt template
+    query_engine.update_prompts(
+        {"response_synthesizer:text_qa_template": qa_prompt_tmpl,
+         "response_synthesizer:refine_template": refine_prompt_tmpl}
+    )
+
+    response = query_engine.query(question)
+
+    print(response)
+
+
+
+"""   firecrawl 爬整个网站 /ApifyActor TODO """
 
 """   多tools的智能体 """
 """   连续对话和记忆 """
-"""   mongodb的数据库功能 """
+
 
 """   定时任务 """
 """   模仿hackernew 推送和新闻头条 """
 """   oss上传 """
-"""   图文回复 """
+
+
 """   RPA控制浏览器 """
     
 
