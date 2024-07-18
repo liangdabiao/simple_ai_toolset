@@ -39,7 +39,7 @@ logger = logging.getLogger("AppLogger")
 router = APIRouter()
 
 
-os.environ["OPENAI_API_KEY"] = config.get("OPENAI_API_KEY")
+os.environ["OPENAI_API_KEY"] =  config.get("OPENAI_API_KEY")
 os.environ["OPENAI_API_BASE"] = config.get("OPENAI_API_BASE")
 
 """ 简单 测试 """
@@ -1167,6 +1167,82 @@ def tool_brick_news():
     return content
 
 
+#Define a  积木新闻2 tool
+def tool_brick_news2():
+    """
+    寻找优惠商品.
+    """
+    sjina = str("https://r.jina.ai/https://zhiyou.smzdm.com/member/6310142286/article/") 
+    response = requests.get(sjina)
+    content = ""
+
+    # 检查请求是否成功
+    if response.status_code == 200:
+        try:
+            # 解析响应的JSON数据
+            content = response.text
+            parts = content.split("6310142286/zhuanlan")
+            # 检查是否有分割后的部分
+            if len(parts) > 1:
+                # 获取分割后的最后一部分
+                content = parts[1]
+                parts2 = content.split(" [下一页]")
+                # 检查是否有分割后的部分
+                if len(parts2) > 1:
+                    # 获取分割后的最后一部分
+                    content = parts2[0]
+            else:
+                print("分隔符不存在于字符串中")
+        except json.JSONDecodeError as e:
+            # 如果响应不是有效的JSON，打印错误信息
+            print(f"Failed to decode JSON: {e}")
+    else:
+        print(f"Request failed with status code: {response.status_code}")
+
+    return content
+
+"""   多tools的智能体 """
+#Define a brick4 search tool
+def tool_brick4_search(keyword: str):
+    """
+    Search content from a given Keyword.
+    Parameters: keyword (str)
+    """
+    llm_instance = LLM.create(provider=LLMProvider.OPENAI, model_name="gpt-4o") 
+    search_query_encoded = quote_plus(keyword)
+    sjina = str("http://brick4.com/get/set?filter_brandorder=0&filter_order=1&brandorder=1&page=1&s="+search_query_encoded)
+    print(sjina)
+    response = requests.get(sjina)
+    content = ""
+
+    # 检查请求是否成功
+    if response.status_code == 200:
+        try:
+            # 检查'data'字段是否存在，并且它是一个数组
+            content = response.json()
+            if 'data' in content and isinstance(content['data'], list):
+                # 将数组转换成字符串
+                first_6_elements = content['data'][:6]
+                content = json.dumps(first_6_elements, ensure_ascii=False)
+            else:
+                content = ""  # 如果'data'字段不存在或不是数组，使用默认值
+            print(content)
+        except json.JSONDecodeError as e:
+            # 如果响应不是有效的JSON，打印错误信息
+            print(f"Failed to decode JSON: {e}")
+    else:
+        print(f"Request failed with status code: {response.status_code}")
+
+     
+    #print(content)
+    #main_points = llm_instance.generate_response(prompt=f"extract the key information out of the following: {content}")
+
+    #print(main_points)
+
+    return content
+
+
+
 """   ai agent tester """
 @router.get("/ai_agent_lego")
 async def ai_agent_lego(question: str, request: Request):
@@ -1176,7 +1252,7 @@ async def ai_agent_lego(question: str, request: Request):
     agent = Agent(LLMProvider.OPENAI, model_name="gpt-4o")
 
     #add tools
-    agent.add_tool(tool_search)
+    agent.add_tool(tool_brick4_search)
     agent.add_tool(tool_smzdm)
     agent.add_tool(tool_brick4)
 
@@ -1187,37 +1263,42 @@ async def ai_agent_lego(question: str, request: Request):
     print(final_result)
 
 
-"""   模仿hackernew 推送和新闻头条 """
+""" 积木写作日报，  模仿hackernew 推送和新闻头条 """
 @router.get("/ai_write_lego")
 async def ai_write_lego(request: Request):
     
-    llm_instance = LLM.create(provider=LLMProvider.OPENAI, model_name="gpt-4o")
+    llm_instance = LLM.create(provider=LLMProvider.OPENAI, model_name="moonshot-v1-128k")
     
     tool_brick_news_str = tool_brick_news()
-    main_points_1 = llm_instance.generate_response(prompt=f"keep image and extract the key information out of the following [积木情报]: {tool_brick_news_str}")
+    main_points_1 = llm_instance.generate_response(prompt=f"从以下[积木情报]中提取关键信息，格式为：（标题，日期时间，链接，图片），上下文是: {tool_brick_news_str}")
+    tool_brick_news2_str = tool_brick_news2()
+    main_points_1b = llm_instance.generate_response(prompt=f"从以下[积木情报]中提取关键信息，格式为：（标题，日期时间，链接，图片），上下文是: {tool_brick_news2_str}")
    
     tool_smzdm_str = tool_smzdm()
-    main_points_2 = llm_instance.generate_response(prompt=f"extract the key information out of the following [积木优惠]: {tool_smzdm_str}")
+    main_points_2 = llm_instance.generate_response(prompt=f"从以下[积木优惠]中提取关键信息，格式为：（标题，价格，折扣，评价，平台，图片），上下文是: {tool_smzdm_str}")
     tool_brick4_str = tool_brick4()
-    main_points_3 = llm_instance.generate_response(prompt=f"extract the key information out of the following [积木新品]: {tool_brick4_str}")
-    all_str ="# 今天积木情报: \n\n" + main_points_1 + "\n\n # 今天积木优惠: \n\n" + main_points_2 + "\n\n # 今天积木新品: \n\n" + main_points_3
+    main_points_3 = llm_instance.generate_response(prompt=f"从以下[积木新品]中提取关键信息，格式为：（名称，价格，上市日期，平台，图片）: {tool_brick4_str}")
+    all_str ="\n\n # 今天积木情报: \n\n" + main_points_1 + "\n\n  " + main_points_1b + "\n\n # 今天积木优惠: \n\n" + main_points_2 + "\n\n # 今天积木新品: \n\n" + main_points_3
     
-    main_points_best = llm_instance.generate_response(prompt=f"你是一个积木专栏作家，请给上下文内容一个总结，上下文如下: {all_str}")
+    main_points_best = llm_instance.generate_response(prompt=f"你是一个积木专栏作家，请给上下文内容一个总结,用中文回答，上下文如下: {all_str}")
     print(main_points_best)
     print(all_str)
 
-"""   firecrawl 爬整个网站 /ApifyActor TODO """
+    # 今日积木小知识 RAG
 
 
-"""   连续对话和记忆 """
+"""   firecrawl /ApifyActor 爬整个网站  TODO """
 
 
-"""   定时任务 """
-
-"""   oss上传 """
+"""   连续对话和记忆 TODO """
 
 
-"""   RPA控制浏览器 """
+"""   定时任务 TODO """
+
+"""   oss上传 TODO """
+
+
+"""   RPA控制浏览器 TODO """
     
 
     
